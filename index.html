@@ -472,6 +472,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sa
       <button class="btn save" onclick="exportData()" style="background:linear-gradient(135deg,#60A5FA,#3B82F6)">📤 匯出備份</button>
       <button class="btn cancel" onclick="importData()" style="border:1.5px solid var(--border)">📥 匯入還原</button>
     </div>
+    <div class="brow" style="margin-top:8px">
+      <button class="btn save" onclick="exportCSV()" style="background:linear-gradient(135deg,#34D399,#10B981);width:100%">📊 匯出 CSV（給其他 App 用）</button>
+    </div>
   </div>
   <input type="file" id="importFile" accept=".json" style="display:none" onchange="doImport(this)">
 </div>
@@ -1290,6 +1293,38 @@ async function exportData(){
   modal.querySelector('textarea').select();
   toast('請全選複製內容後存到記事本 ✓');
   updateBackupInfo();
+}
+async function exportCSV(){
+  if(!db.txs||db.txs.length===0){toast('目前沒有任何記帳記錄');return;}
+  const header='日期,類型,金額,類別,備註';
+  const rows=db.txs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(t=>{
+    const type=t.type==='income'?'收入':'支出';
+    const cat=gc(t.category,t.type)?.n||t.category;
+    const note=(t.note||'').replace(/,/g,'，').replace(/"/g,'""');
+    return `${t.date},${type},${t.amount},"${cat}","${note}"`;
+  });
+  const csv='﻿'+header+'\n'+rows.join('\n');
+  const now=new Date();
+  const ds=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+  if(navigator.share&&navigator.canShare){
+    try{
+      const file=new File([csv],`帳本_${ds}.csv`,{type:'text/csv'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'帳本記錄 CSV'});
+        return;
+      }
+    }catch(e){if(e.name!=='AbortError')console.log(e);}
+  }
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;flex-direction:column;padding:20px;box-sizing:border-box';
+  modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:16px;flex:1;display:flex;flex-direction:column;max-height:100%">
+    <div style="font-weight:600;margin-bottom:8px;color:var(--text)">CSV 內容（全選複製後存成 .csv）</div>
+    <textarea readonly style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;resize:none;word-break:break-all">${csv}</textarea>
+    <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px">關閉</button>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('textarea').select();
+  toast('請全選複製 CSV 內容 ✓');
 }
 function importData(){
   if(!confirm('匯入備份會覆蓋目前所有資料，確定繼續嗎？'))return;
