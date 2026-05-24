@@ -1259,7 +1259,7 @@ function renderDayDetail(d,dayMap){
 }
 
 // === BACKUP / RESTORE ===
-function exportData(){
+async function exportData(){
   const now=new Date();
   const ds=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
   const payload={
@@ -1267,12 +1267,28 @@ function exportData(){
     _exportedAt:now.toISOString(),
     txs:db.txs,accs:db.accs,stks:db.stks,fix:db.fix
   };
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download=`帳本備份_${ds}.json`;a.click();
-  URL.revokeObjectURL(url);
-  toast('備份已下載 ✓');
+  const json=JSON.stringify(payload,null,2);
+  const fileName=`帳本備份_${ds}.json`;
+  if(navigator.share && navigator.canShare){
+    try{
+      const file=new File([json],fileName,{type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'帳本備份'});
+        updateBackupInfo();return;
+      }
+    }catch(e){if(e.name!=='AbortError')console.log(e);}
+  }
+  // fallback: show text for manual copy
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;flex-direction:column;padding:20px;box-sizing:border-box';
+  modal.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:16px;flex:1;display:flex;flex-direction:column;max-height:100%">
+    <div style="font-weight:600;margin-bottom:8px;color:var(--text)">備份內容（全選複製後存檔）</div>
+    <textarea readonly style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:11px;resize:none;word-break:break-all">${json}</textarea>
+    <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:12px;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px">關閉</button>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('textarea').select();
+  toast('請全選複製內容後存到記事本 ✓');
   updateBackupInfo();
 }
 function importData(){
