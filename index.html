@@ -605,7 +605,7 @@ function stkAv(k){const sh=stkSh(k);return sh>0?stkCost(k)/sh:0;}
 let CY=new Date().getFullYear(), CM=new Date().getMonth();
 let tt='expense', tc='', as='0';
 let eAccId=null, eStkId=null, eFixId=null, fixCat='';
-let accCol='#F5A623', confCB=null;
+let accCol='#F5A623', confCB=null, stkExpanded={};
 let hCI=null;
 
 const mTxs=(y,m)=>db.txs.filter(t=>{const d=new Date(t.date);return d.getFullYear()===y&&d.getMonth()===m});
@@ -800,7 +800,9 @@ function rAssets(){
     const dailyUp=(k.chgPct||0)>=0;
     const dailyBadge=hasDailyChg?`<span class="daily-badge ${dailyUp?'up':'dn'}">${dailyUp?'+':''}${(k.chgPct||0).toFixed(2)}%</span>`:'';
     const prColor=k.pr&&k.prevClose?(k.pr>=k.prevClose?'color:#4ADE80':'color:#F87171'):'';
-    const buyRows=(k.buys||[]).map(b=>`
+    const buys=k.buys||[];
+    const expanded=stkExpanded[k.id];
+    const buyRows=buys.map(b=>`
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub);padding:4px 0;border-top:1px solid rgba(255,255,255,.06)">
         <span>${b.date||'—'}</span>
         <span>${b.sh.toLocaleString()} 股 × NT$${b.price.toLocaleString()}</span>
@@ -822,7 +824,12 @@ function rAssets(){
         <span>現價 <b style="${prColor}">NT$${(k.pr||0).toLocaleString()}</b></span>
         <span>成本 <b>NT$${costK.toLocaleString()}</b></span>
       </div>
-      ${buyRows?`<div style="margin-top:6px">${buyRows}</div>`:''}
+      ${buys.length?`
+      <div onclick="toggleBuyRows('${k.id}',event)" style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:var(--sub);cursor:pointer;user-select:none">
+        ${expanded?'▴':'▾'} ${buys.length} 筆買入記錄
+      </div>
+      ${expanded?`<div style="margin-top:2px">${buyRows}</div>`:''}
+      `:''}
     </div>`;
   }).join('')
     :'<div class="empty" style="padding:20px"><p style="font-size:13px">尚未新增持股<br><span style="font-size:11px;color:var(--sub)">點 ＋ 輸入代碼即可自動搜尋</span></p></div>';
@@ -1055,6 +1062,7 @@ function saveStk(){
   sv();closeStk();rAssets();toast(eStkId?'已更新 ✓':'已新增 ✓');
 }
 function delStk(id){askConf('確定要刪除此持股嗎？',()=>{db.stks=db.stks.filter(k=>k.id!==id);sv();closeStk();rAssets();toast('已刪除');});}
+function toggleBuyRows(id,e){e.stopPropagation();stkExpanded[id]=!stkExpanded[id];rAssets();}
 
 // === FIXED ===
 function rFixed(){
