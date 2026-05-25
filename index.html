@@ -367,7 +367,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sa
 
 <!-- STOCK MODAL -->
 <div class="cov" id="stkOv">
-  <div class="cbox">
+  <div class="cbox" style="max-height:85vh;overflow-y:auto">
     <h3 id="stkT">新增持股</h3>
     <div class="frow">
       <label>股票代碼</label>
@@ -378,15 +378,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sa
       <div id="sStatus" style="font-size:11px;margin-top:5px;min-height:15px"></div>
     </div>
     <div class="frow"><label>股票名稱 <span style="font-weight:400;color:var(--sub)">（搜尋後自動填入）</span></label><input type="text" class="fi" id="sN" placeholder="台積電" maxlength="20"></div>
-    <div class="fg2" style="margin-bottom:0">
-      <div class="frow" style="margin:0"><label>持有股數</label><input type="number" class="fi" id="sSh" placeholder="1000" min="0"></div>
-      <div class="frow" style="margin:0"><label>均買價 (NT$)</label><input type="number" class="fi" id="sAv" placeholder="600" min="0"></div>
-    </div>
-    <div class="frow" style="margin-top:10px">
+    <div class="frow">
       <label>現在股價 (NT$) <span id="sPrLbl" style="font-weight:400;color:var(--sub)"></span></label>
       <input type="number" class="fi" id="sPr" placeholder="點搜尋自動取得" min="0">
     </div>
-    <div class="brow" id="sBrow"></div>
+    <div style="margin:14px 0 8px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-weight:600;font-size:14px;color:var(--text)">買入記錄</span>
+      <button onclick="showBuyForm()" style="font-size:12px;padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer">＋ 新增買入</button>
+    </div>
+    <div id="buyList"></div>
+    <div id="buySummary"></div>
+    <div id="buyForm" style="display:none;background:var(--bg);border-radius:10px;padding:12px;margin:8px 0;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px">新增買入</div>
+      <div class="fg2">
+        <div class="frow" style="margin:0"><label>日期</label><input type="date" class="fi" id="bDate"></div>
+        <div class="frow" style="margin:0"><label>股數</label><input type="number" class="fi" id="bSh" placeholder="1000" min="1"></div>
+      </div>
+      <div class="frow" style="margin-top:10px"><label>買入價 (NT$)</label><input type="number" class="fi" id="bPr" placeholder="600" min="0" step="0.01"></div>
+      <div class="brow">
+        <button class="btn cancel" onclick="hideBuyForm()">取消</button>
+        <button class="btn save" onclick="saveBuy()">新增</button>
+      </div>
+    </div>
+    <div class="brow" id="sBrow" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -577,7 +591,12 @@ const fmt=n=>'NT$'+Math.abs(n).toLocaleString();
 const pad=n=>String(n).padStart(2,'0');
 
 let db=JSON.parse(localStorage.getItem('lb3')||'{"txs":[],"accs":[],"stks":[],"fix":[]}');
+// migrate old stk format (sh/av) to buys array
+db.stks.forEach(k=>{if(!k.buys){k.buys=(k.sh>0||k.av>0)?[{id:Date.now().toString()+Math.random().toString(36).slice(2),date:'',sh:k.sh||0,price:k.av||0}]:[];}});
 const sv=()=>localStorage.setItem('lb3',JSON.stringify(db));
+function stkSh(k){return(k.buys||[]).reduce((s,b)=>s+b.sh,0);}
+function stkCost(k){return(k.buys||[]).reduce((s,b)=>s+b.sh*b.price,0);}
+function stkAv(k){const sh=stkSh(k);return sh>0?stkCost(k)/sh:0;}
 
 let CY=new Date().getFullYear(), CM=new Date().getMonth();
 let tt='expense', tc='', as='0';
@@ -751,8 +770,8 @@ function delFromEdit(){
 // === ASSETS ===
 function rAssets(){
   const bk=db.accs.reduce((s,a)=>s+a.bal,0);
-  const sv2=db.stks.reduce((s,k)=>s+(k.sh*(k.pr||0)),0);
-  const cost=db.stks.reduce((s,k)=>s+(k.sh*(k.av||0)),0);
+  const sv2=db.stks.reduce((s,k)=>s+stkSh(k)*(k.pr||0),0);
+  const cost=db.stks.reduce((s,k)=>s+stkCost(k),0);
   const pnl=sv2-cost;
   document.getElementById('nw').textContent=fmt(bk+sv2);
   document.getElementById('nw-b').textContent=fmt(bk);
@@ -770,17 +789,24 @@ function rAssets(){
 
   const sl=document.getElementById('stkList');
   sl.innerHTML=db.stks.length?db.stks.map(k=>{
-    const val=k.sh*(k.pr||0),cost2=k.sh*(k.av||0),pnl2=val-cost2;
-    const pct=cost2>0?((pnl2/cost2)*100).toFixed(1):0;
+    const sh=stkSh(k),costK=stkCost(k),av=stkAv(k);
+    const val=sh*(k.pr||0),pnl2=val-costK;
+    const pct=costK>0?((pnl2/costK)*100).toFixed(1):0;
     const hasDailyChg=k.chgPct!=null;
     const dailyUp=(k.chgPct||0)>=0;
     const dailyBadge=hasDailyChg?`<span class="daily-badge ${dailyUp?'up':'dn'}">${dailyUp?'+':''}${(k.chgPct||0).toFixed(2)}%</span>`:'';
     const prColor=k.pr&&k.prevClose?(k.pr>=k.prevClose?'color:#4ADE80':'color:#F87171'):'';
+    const buyRows=(k.buys||[]).map(b=>`
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub);padding:4px 0;border-top:1px solid rgba(255,255,255,.06)">
+        <span>${b.date||'—'}</span>
+        <span>${b.sh.toLocaleString()} 股 × NT$${b.price.toLocaleString()}</span>
+        <span style="color:var(--text)">NT$${(b.sh*b.price).toLocaleString()}</span>
+      </div>`).join('');
     return `<div class="card stk-card" onclick="openStk('${k.id}')">
       <div class="stk-top">
         <div>
           <div class="stk-name">${k.name} <span style="font-size:11px;color:var(--sub)">${k.sym}</span>${dailyBadge}</div>
-          <div class="stk-sym">${k.sh.toLocaleString()} 股</div>
+          <div class="stk-sym">${sh.toLocaleString()} 股</div>
         </div>
         <div>
           <div class="stk-val">NT$${val.toLocaleString()}</div>
@@ -788,10 +814,11 @@ function rAssets(){
         </div>
       </div>
       <div class="stk-bottom">
-        <span>均買 <b>NT$${(k.av||0).toLocaleString()}</b></span>
+        <span>均買 <b>NT$${av.toFixed(2)}</b></span>
         <span>現價 <b style="${prColor}">NT$${(k.pr||0).toLocaleString()}</b></span>
-        <span>成本 <b>NT$${cost2.toLocaleString()}</b></span>
+        <span>成本 <b>NT$${costK.toLocaleString()}</b></span>
       </div>
+      ${buyRows?`<div style="margin-top:6px">${buyRows}</div>`:''}
     </div>`;
   }).join('')
     :'<div class="empty" style="padding:20px"><p style="font-size:13px">尚未新增持股<br><span style="font-size:11px;color:var(--sub)">點 ＋ 輸入代碼即可自動搜尋</span></p></div>';
@@ -940,15 +967,76 @@ function openStk(id){
   document.getElementById('stkT').textContent=id?'編輯持股':'新增持股';
   document.getElementById('sSym').value=k?k.sym:'';
   document.getElementById('sN').value=k?k.name:'';
-  document.getElementById('sSh').value=k?k.sh:'';
-  document.getElementById('sAv').value=k?k.av:'';
   document.getElementById('sPr').value=k?(k.pr||''):'';
   document.getElementById('sStatus').textContent='';
   document.getElementById('sPrLbl').textContent=k?.pr?'（上次儲存值）':'';
+  document.getElementById('buyForm').style.display='none';
+  document.getElementById('bDate').value=new Date().toISOString().slice(0,10);
+  document.getElementById('bSh').value='';
+  document.getElementById('bPr').value='';
+  renderBuyList();
   document.getElementById('sBrow').innerHTML=id
     ?`<button class="btn del" onclick="delStk('${id}')">刪除</button><button class="btn cancel" onclick="closeStk()">取消</button><button class="btn save" onclick="saveStk()">儲存</button>`
     :`<button class="btn cancel" onclick="closeStk()">取消</button><button class="btn save" onclick="saveStk()">儲存</button>`;
   document.getElementById('stkOv').classList.add('open');
+}
+function renderBuyList(){
+  const k=eStkId?db.stks.find(x=>x.id===eStkId):null;
+  const buys=k?.buys||[];
+  const bl=document.getElementById('buyList');
+  const bs=document.getElementById('buySummary');
+  if(!buys.length){
+    bl.innerHTML='<div style="font-size:12px;color:var(--sub);padding:6px 0 4px">尚未新增買入記錄</div>';
+    bs.innerHTML='';return;
+  }
+  bl.innerHTML=buys.map(b=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div style="flex:1;color:var(--sub);font-size:12px">${b.date||'—'}</div>
+      <div style="color:var(--text)">${b.sh.toLocaleString()} 股</div>
+      <div style="color:var(--text)">NT$${b.price.toLocaleString()}</div>
+      <div style="color:var(--sub);font-size:11px;min-width:70px;text-align:right">NT$${(b.sh*b.price).toLocaleString()}</div>
+      <button onclick="delBuy('${b.id}')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+    </div>`).join('');
+  const sh=buys.reduce((s,b)=>s+b.sh,0);
+  const cost2=buys.reduce((s,b)=>s+b.sh*b.price,0);
+  const av2=sh>0?cost2/sh:0;
+  bs.innerHTML=`<div style="display:flex;gap:14px;font-size:12px;color:var(--sub);padding:8px 0 4px">
+    <span>合計 <b style="color:var(--text)">${sh.toLocaleString()} 股</b></span>
+    <span>均買 <b style="color:var(--text)">NT$${av2.toFixed(2)}</b></span>
+    <span>總成本 <b style="color:var(--text)">NT$${cost2.toLocaleString()}</b></span>
+  </div>`;
+}
+function showBuyForm(){document.getElementById('buyForm').style.display='block';}
+function hideBuyForm(){document.getElementById('buyForm').style.display='none';}
+function saveBuy(){
+  const sh=parseFloat(document.getElementById('bSh').value)||0;
+  const price=parseFloat(document.getElementById('bPr').value)||0;
+  const date=document.getElementById('bDate').value;
+  if(!sh||sh<=0){toast('請輸入股數');return;}
+  if(!price||price<=0){toast('請輸入買入價');return;}
+  if(!eStkId){
+    const name=document.getElementById('sN').value.trim();
+    const sym=document.getElementById('sSym').value.trim();
+    if(!sym){toast('請先輸入股票代碼');return;}
+    if(!name){toast('請先輸入股票名稱');return;}
+    const pr=parseFloat(document.getElementById('sPr').value)||0;
+    const newId=Date.now().toString();
+    db.stks.push({id:newId,name,sym,pr,buys:[]});
+    eStkId=newId;
+    document.getElementById('sBrow').innerHTML=`<button class="btn del" onclick="delStk('${newId}')">刪除</button><button class="btn cancel" onclick="closeStk()">取消</button><button class="btn save" onclick="saveStk()">儲存</button>`;
+  }
+  const k=db.stks.find(x=>x.id===eStkId);
+  if(!k.buys)k.buys=[];
+  k.buys.push({id:Date.now().toString()+Math.random().toString(36).slice(2),date,sh,price});
+  k.buys.sort((a,b)=>a.date.localeCompare(b.date));
+  sv();hideBuyForm();
+  document.getElementById('bSh').value='';document.getElementById('bPr').value='';
+  renderBuyList();rAssets();toast('已新增買入記錄 ✓');
+}
+function delBuy(bid){
+  const k=db.stks.find(x=>x.id===eStkId);if(!k)return;
+  k.buys=k.buys.filter(b=>b.id!==bid);
+  sv();renderBuyList();rAssets();
 }
 function closeStk(){document.getElementById('stkOv').classList.remove('open');eStkId=null;}
 function saveStk(){
@@ -956,9 +1044,9 @@ function saveStk(){
   const sym=document.getElementById('sSym').value.trim();
   if(!sym){toast('請輸入股票代碼');return;}
   if(!name){toast('請輸入股票名稱');return;}
-  const obj={name,sym,sh:parseFloat(document.getElementById('sSh').value)||0,av:parseFloat(document.getElementById('sAv').value)||0,pr:parseFloat(document.getElementById('sPr').value)||0};
-  if(eStkId){const k=db.stks.find(x=>x.id===eStkId);Object.assign(k,obj);}
-  else db.stks.push({id:Date.now().toString(),...obj});
+  const pr=parseFloat(document.getElementById('sPr').value)||0;
+  if(eStkId){const k=db.stks.find(x=>x.id===eStkId);k.name=name;k.sym=sym;k.pr=pr;}
+  else db.stks.push({id:Date.now().toString(),name,sym,pr,buys:[]});
   sv();closeStk();rAssets();toast(eStkId?'已更新 ✓':'已新增 ✓');
 }
 function delStk(id){askConf('確定要刪除此持股嗎？',()=>{db.stks=db.stks.filter(k=>k.id!==id);sv();closeStk();rAssets();toast('已刪除');});}
