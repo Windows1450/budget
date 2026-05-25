@@ -1033,9 +1033,10 @@ function saveBuy(){
   if(!k.buys)k.buys=[];
   k.buys.push({id:Date.now().toString()+Math.random().toString(36).slice(2),date,sh,price});
   k.buys.sort((a,b)=>a.date.localeCompare(b.date));
-  sv();hideBuyForm();
+  sv();
   document.getElementById('bSh').value='';document.getElementById('bPr').value='';
-  renderBuyList();rAssets();toast('已新增買入記錄 ✓');
+  document.getElementById('bSh').focus();
+  renderBuyList();rAssets();toast('已新增 ✓ 繼續輸入下一筆或按取消關閉');
 }
 function delBuy(bid){
   const k=db.stks.find(x=>x.id===eStkId);if(!k)return;
