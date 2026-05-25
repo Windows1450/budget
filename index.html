@@ -489,8 +489,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sa
     <div class="brow" style="margin-top:8px">
       <button class="btn save" onclick="exportCSV()" style="background:linear-gradient(135deg,#34D399,#10B981);width:100%">📊 匯出 CSV（給其他 App 用）</button>
     </div>
+    <div class="brow" style="margin-top:8px">
+      <button class="btn cancel" onclick="importCSV()" style="border:1.5px solid #10B981;color:#10B981;width:100%">📂 匯入 CSV</button>
+    </div>
   </div>
   <input type="file" id="importFile" accept=".json" style="display:none" onchange="doImport(this)">
+  <input type="file" id="importCSVFile" accept=".csv" style="display:none" onchange="doImportCSV(this)">
 </div>
 
 <!-- PAGE: FIXED -->
@@ -1414,6 +1418,46 @@ async function exportCSV(){
   modal.querySelector('textarea').select();
   toast('請全選複製 CSV 內容 ✓');
 }
+function importCSV(){
+  document.getElementById('importCSVFile').value='';
+  document.getElementById('importCSVFile').click();
+}
+function parseCSVLine(line){
+  const res=[];let f='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){if(inQ&&line[i+1]==='"'){f+='"';i++;}else inQ=!inQ;}
+    else if(ch===','&&!inQ){res.push(f);f='';}
+    else f+=ch;
+  }
+  res.push(f);return res;
+}
+function doImportCSV(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const text=e.target.result.replace(/^﻿/,'');
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    if(lines.length<2){toast('CSV 格式錯誤');return;}
+    const catByName={};
+    [...ECATS,...ICATS].forEach(c=>catByName[c.n]=c.id);
+    let added=0,skipped=0;
+    for(let i=1;i<lines.length;i++){
+      const [date,typeStr,amtStr,catName,note]=parseCSVLine(lines[i]);
+      const type=typeStr==='收入'?'income':typeStr==='支出'?'expense':null;
+      const amount=parseFloat(amtStr);
+      if(!type||!amount||!date){skipped++;continue;}
+      const catId=catByName[(catName||'').trim()]||(type==='income'?'other_i':'other');
+      db.txs.push({id:Date.now().toString()+Math.random().toString(36).slice(2),type,amount,category:catId,date:date.trim(),note:(note||'').trim()});
+      added++;
+    }
+    sv();
+    const pg=document.querySelector('.page.active')?.id?.replace('page-','');
+    if(pg==='home')rHome();if(pg==='stats')rStats();
+    toast(`匯入完成：新增 ${added} 筆${skipped?`，略過 ${skipped} 筆`:''}  ✓`);
+  };
+  reader.readAsText(file,'UTF-8');
+}
 function importData(){
   if(!confirm('匯入備份會覆蓋目前所有資料，確定繼續嗎？'))return;
   document.getElementById('importFile').value='';
@@ -1432,6 +1476,7 @@ function doImport(inp){
         stks:data.stks||[],
         fix:data.fix||[]
       };
+      db.stks.forEach(k=>{if(!k.buys){k.buys=(k.sh>0||k.av>0)?[{id:Date.now().toString()+Math.random().toString(36).slice(2),date:'',sh:k.sh||0,price:k.av||0}]:[];}});
       sv();
       const pg=document.querySelector('.page.active')?.id?.replace('page-','');
       if(pg==='home')rHome();
