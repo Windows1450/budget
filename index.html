@@ -1438,7 +1438,8 @@ async function exportData(){
   const fileName=`帳本備份_${ds}.json`;
   // 在 App 內：透過原生層儲存並跳出分享選單
   if(window.ReactNativeWebView){
-    window.ReactNativeWebView.postMessage(JSON.stringify({type:'saveFile',filename:fileName,data:json}));
+    const asciiName=`budget-backup-${ds}.json`;
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'saveFile',filename:asciiName,data:json}));
     updateBackupInfo();toast('備份完成，請選擇儲存位置 ✓');return;
   }
   if(navigator.share && navigator.canShare){
@@ -1581,8 +1582,4 @@ document.getElementById('txOv').addEventListener('click',e=>{if(e.target===docum
 syncLbl();rHome();updateBackupInfo();
 
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').catch(()=>{});
-}
-</script>
-</body>
-</html>
+  navigator.serviceWorker.register('./sw
